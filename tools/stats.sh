@@ -15,7 +15,9 @@ TraceFileXz="$TraceFile.xz"
 
 node dist/qlprof $LogFile -o $TraceFile
 
-gzip -c $LogFile > $LogFileGz
+TIMEFORMAT=%lU
+
+time (gzip -c $LogFile > $LogFileGz) 2> $LogFileGz.time
 gzip -c $TraceFile > $TraceFileGz
 
 xz -c $LogFile > $LogFileXz

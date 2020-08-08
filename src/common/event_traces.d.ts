@@ -165,12 +165,17 @@ export interface EndEvaluationEvent extends EvaluationEvent {
         /**
          * RA text for each step in the pipeline.
          *
+         * If this is a number, it is a reference to an earlier `EndEvaluationEvent` whose RA text is reused
+         * by this event.
+         *
          * Must have the same length as `tc` and be absent if `tc` is absent.
          */
-        // TODO: experiment with backreferencing earlier RA text
         // TODO: experiment with backreferencing earlier predicate names in the RA text itself
         // TODO: write partial specification of RA text
-        ra?: string[]; 
+        ra?: string[] | number;
+
+        /** An ID by which later events can reference the RA text */
+        id?: number;
     }
 }
 
