@@ -1,5 +1,5 @@
 import { TupleCountStream, TupleCountParser } from './tuple_counts';
-import { TraceEvent, Phase, EventCategory, Trace } from './event_traces';
+import { TraceEvent, Phase, EventCategory, Trace, UnusedPhase } from './event_traces';
 import { EventStream } from './event_stream';
 import { streamLinesSync } from './line_stream';
 
@@ -17,14 +17,6 @@ export function toTraceEvents(input: TupleCountStream): TraceEventStream {
     let currentTime = 0;
     let previousRA = new Map<string, number>();
     input.onPipeline.listen(pipeline => {
-        onTraceEvent.fire({
-            ph: Phase.begin,
-            cat: EventCategory.predicateEvaluation,
-            name: pipeline.predicate,
-            tid: 1,
-            pid: 1,
-            ts: currentTime,
-        });
         currentTime += 1; // We don't currently parse time from the log
         let tupleCounts: number[] = [];
         let duplicationFactors: number[] = [];
@@ -47,12 +39,13 @@ export function toTraceEvents(input: TupleCountStream): TraceEventStream {
         }
 
         onTraceEvent.fire({
-            ph: Phase.end,
-            cat: EventCategory.predicateEvaluation,
+            ph: Phase.complete,
+            cat: EventCategory.evaluation,
             name: pipeline.predicate,
             tid: 1,
             pid: 1,
             ts: currentTime,
+            dur: 1,
             args: {
                 rows: 0,
                 tc: tupleCounts,
@@ -60,7 +53,7 @@ export function toTraceEvents(input: TupleCountStream): TraceEventStream {
                 ra: raValue,
                 id,
             }
-        });
+        } as any);
     });
     return {
         onTraceEvent,

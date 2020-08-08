@@ -20,6 +20,18 @@ export const enum Phase {
     /** Marks the end of an event previously started with `begin`. */
     end = 'E',
 
+    /**
+     * Logically a begin/end pair merged into a single event.
+     *
+     * The timestamp (`ts`) is the start of the event, and the duration (`dur`) is required.
+     *
+     * Unlike begin/end events, complete events do not need to occur in ascending timestamp order.
+     *
+     * Unlike in the general Event Trace format, `complete` events are not interchangeable with
+     * `begin`/`end` pairs.
+     */
+    complete = 'X',
+
     /** An event with no associated duration. */
     instant = 'I',
 
@@ -31,14 +43,6 @@ export const enum Phase {
 
 /** Phases from the Event Trace format that we currently do not use in CodeQL. */
 export const enum UnusedPhase {
-    /**
-     * A begin/end pair merged into a single event.
-     *
-     * The timestamp (`ts`) is the start of the event, and the duration (`dur`) is required.
-     *
-     * Unlike begin/end events, complete events do not need to occur in ascending timestamp order.
-     */
-    complete = 'X',
     counter = 'C',
     asyncStart = 'b',
     asyncInstant = 'n',
@@ -78,10 +82,10 @@ export enum Scope {
  */
 export const enum EventCategory {
     /** Evaluation of a predicate that started/ended. */
-    predicateEvaluation = 'eval',
+    evaluation = 'eval',
 
     /** A predicate was found in the cache. */
-    predicateCacheHit = 'cachehit',
+    cacheHit = 'cachehit',
 
     /** A metadata event. */
     metadata = 'meta',
@@ -123,27 +127,15 @@ export interface TraceEventBase {
     args?: any;
 }
 
-export interface EvaluationEvent extends TraceEventBase {
-    ph: Phase.begin | Phase.end;
-
-    cat: EventCategory.predicateEvaluation;
-
-    /** The name of the predicate being evaluated. */
-    name: string;
-}
-
-/**
- * A thread has started to evaluate a predicate.
- */
-export interface BeginEvaluationEvent extends EvaluationEvent {
-    ph: Phase.begin;
-}
-
 /**
  * A thread has finished evaluating a predicate.
  */
-export interface EndEvaluationEvent extends EvaluationEvent {
-    ph: Phase.end;
+export interface EvaluationEvent extends TraceEventBase {
+    ph: Phase.complete;
+
+    cat: EventCategory.evaluation;
+
+    dur: number;
 
     args: {
         /** If true, the evaluation failed. Due to being rare event, this property is only present if evaluation actually failed. */
@@ -183,7 +175,7 @@ export interface EndEvaluationEvent extends EvaluationEvent {
 export interface CacheHitEvent extends TraceEventBase {
     ph: Phase.instant;
 
-    cat: EventCategory.predicateCacheHit;
+    cat: EventCategory.cacheHit;
 
     scope: Scope.thread | Scope.process;
 
@@ -205,8 +197,7 @@ export interface MetadataEvent extends TraceEventBase {
 }
 
 export type TraceEvent =
-    | BeginEvaluationEvent
-    | EndEvaluationEvent
+    | EvaluationEvent
     | CacheHitEvent
     | MetadataEvent
     ;
