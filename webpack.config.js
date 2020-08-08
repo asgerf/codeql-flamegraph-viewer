@@ -13,18 +13,30 @@ const common = {
     },
 };
 
-const cli = {
+const nodeCommon = {
     ...common,
     target: 'node',
-    entry: './src/bin/flamegraph.ts',
-    output: {
-        filename: 'flamegraph.js'
-    },
     node: {
         __dirname: false, // Do not rewrite __dirname
         __filename: false,
     }
+}
+
+const flamegraphCli = {
+    ...nodeCommon,
+    entry: './src/bin/flamegraph.ts',
+    output: {
+        filename: 'flamegraph.js'
+    },
 };
+
+const qlprofCli = {
+    ...nodeCommon,
+    entry: './src/bin/qlprof.ts',
+    output: {
+        filename: 'qlprof.js'
+    },
+}
 
 const web = {
     ...common,
@@ -53,4 +65,4 @@ const web = {
     ]
 };
 
-module.exports = [cli, web];
+module.exports = [flamegraphCli, qlprofCli, web];

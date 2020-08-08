@@ -4,6 +4,8 @@ import * as pathlib from 'path';
 import { getFlamegraphFromLogStream, getFlamegraphFromLogText, FlamegraphNode } from '../common/flamegraph_builder';
 import escapeHtml = require('lodash.escape');
 import { TraceEvent, Constants, TraceStreamJson } from '@tracerbench/trace-event';
+import { getLogFileFromCliArg } from '../common/get_log_file';
+import { mkdirp } from '../common/mkdirp';
 
 enum Format {
     html = 'html',
@@ -55,34 +57,11 @@ trace: Trace Event JSON file.
     }
 });
 
-let input = args[0];
-if (!fs.existsSync(input)) {
-    cli.fail('File not found: ' + input);
-}
-if (fs.statSync(input).isDirectory()) {
-    let logDir = pathlib.join(input, 'log');
-    if (!fs.existsSync(logDir) || !fs.statSync(logDir).isDirectory()) {
-        cli.fail('Not a snapshot or log file: ' + input);
-    }
-    let logFiles = fs.readdirSync(logDir).filter(f => /^execute-queries-[\d.]+\.log$/.test(f)).sort();
-    if (logFiles.length === 0) {
-        cli.fail('No logs in snapshot: ' + input);
-    }
-    input = pathlib.join(logDir, logFiles[logFiles.length - 1]);
-}
+let input = getLogFileFromCliArg(args[0]);
 
 let outputFile = options.outputFile ?? (options.format === Format.html ? 'flamegraph.html' : 'flamegraph.json');
 let outputDir = pathlib.dirname(outputFile);
 
-function mkdirp(path: string) {
-    if (!fs.existsSync(path)) {
-        let parent = pathlib.dirname(path);
-        if (parent.length < path.length) {
-            mkdirp(pathlib.dirname(path));
-        }
-        fs.mkdirSync(path);
-    }
-}
 mkdirp(outputDir);
 let outputDataFile = outputFile + '.data.js';
 
