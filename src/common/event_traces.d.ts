@@ -170,7 +170,6 @@ export interface EndEvaluationEvent extends EvaluationEvent {
          *
          * Must have the same length as `tc` and be absent if `tc` is absent.
          */
-        // TODO: experiment with backreferencing earlier predicate names in the RA text itself
         // TODO: write partial specification of RA text
         ra?: string[] | number;
 

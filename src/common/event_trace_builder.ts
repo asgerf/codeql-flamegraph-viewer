@@ -1,7 +1,7 @@
-import { TupleCountStream, TupleCountParser } from "./tuple_counts";
-import { TraceEvent, Phase, EventCategory, Trace } from "./event_traces";
-import { EventStream } from "./event_stream";
-import { streamLinesSync } from "./line_stream";
+import { TupleCountStream, TupleCountParser } from './tuple_counts';
+import { TraceEvent, Phase, EventCategory, Trace } from './event_traces';
+import { EventStream } from './event_stream';
+import { streamLinesSync } from './line_stream';
 
 export function getTraceEventsFromLogText(text: string) {
     return streamLinesSync(text).thenNew(TupleCountParser).then(toTraceEvents).then(makeTraceEventJson).get();
@@ -15,6 +15,7 @@ export interface TraceEventStream {
 export function toTraceEvents(input: TupleCountStream): TraceEventStream {
     const onTraceEvent = new EventStream<TraceEvent>();
     let currentTime = 0;
+    let previousRA = new Map<string, number>();
     input.onPipeline.listen(pipeline => {
         onTraceEvent.fire({
             ph: Phase.begin,
@@ -25,14 +26,26 @@ export function toTraceEvents(input: TupleCountStream): TraceEventStream {
             ts: currentTime,
         });
         currentTime += 1; // We don't currently parse time from the log
-        let tc: number[] = [];
-        let dup: number[] = [];
-        let ra: string[] = [];
+        let tupleCounts: number[] = [];
+        let duplicationFactors: number[] = [];
+        let raTexts: string[] = [];
         for (let step of pipeline.steps) {
-            tc.push(step.tupleCount);
-            dup.push(step.duplication / 100.0);
-            ra.push(step.raText);
+            tupleCounts.push(step.tupleCount);
+            duplicationFactors.push(step.duplication / 100.0);
+            raTexts.push(step.raText);
         }
+
+        // Store the RA if not found
+        let fullRa = raTexts.join('\n');
+        let raValue: string[] | number = raTexts;
+        let id: number | undefined = undefined;
+        if (previousRA.has(fullRa)) {
+            raValue = previousRA.get(fullRa)!;
+        } else {
+            id = previousRA.size;
+            previousRA.set(fullRa, id);
+        }
+
         onTraceEvent.fire({
             ph: Phase.end,
             cat: EventCategory.predicateEvaluation,
@@ -42,9 +55,10 @@ export function toTraceEvents(input: TupleCountStream): TraceEventStream {
             ts: currentTime,
             args: {
                 rows: 0,
-                tc,
-                dup,
-                ra,
+                tc: tupleCounts,
+                dup: duplicationFactors,
+                ra: raValue,
+                id,
             }
         });
     });
