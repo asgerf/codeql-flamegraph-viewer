@@ -6,31 +6,33 @@ MyDir=$(dirname $(realpath $0))
 BaseDir="$MyDir/.."
 cd $BaseDir
 
-LogFile='example-data/example.logfile.log'
-TraceFile='scrap/example.trace.json'
-LogFileGz='scrap/example.logfile.log.gz'
-TraceFileGz="$TraceFile.gz"
-LogFileXz='scrap/example.logfile.log.xz'
-TraceFileXz="$TraceFile.xz"
+OrigLogFile='example-data/example.logfile.log'
 
-node dist/qlprof $LogFile -o $TraceFile
+LogFile='scrap/example.logfile.log'
+TraceFile='scrap/example.trace.json'
+
+node dist/qlprof $OrigLogFile -o $TraceFile
 
 TIMEFORMAT=%lU
 
-time (gzip -c $LogFile > $LogFileGz) 2> $LogFileGz.time
-gzip -c $TraceFile > $TraceFileGz
+time (gzip -c $OrigLogFile > $LogFile.gz) 2> $LogFile.gz.time
+time (gzip -c $TraceFile > $TraceFile.gz) 2> $TraceFile.gz.time
 
-xz -c $LogFile > $LogFileXz
-xz -c $TraceFile > $TraceFileXz
+time (xz -c $OrigLogFile > $LogFile.xz) 2> $LogFile.xz.time
+time (xz -c $TraceFile > $TraceFile.xz) 2> $TraceFile.xz.time
 
-function getsize {
+function getSize {
     du -sh $1 | awk '{print $1}'
 }
 
+function getSizeAndTime {
+    getSize $1; cat $1.time
+}
+
 function makeTable {
-    echo '.' 'Plain' '.gz' '.xz'
-    echo 'Logfile' $(getsize $LogFile) $(getsize $LogFileGz) $(getsize $LogFileXz)
-    echo 'Trace' $(getsize $TraceFile) $(getsize $TraceFileGz) $(getsize $TraceFileXz)
+    echo '.' 'Size' 'GZ-size' 'GZ-time' 'XZ-size' 'XZ-time'
+    echo 'Logfile' $(getSize $OrigLogFile) $(getSizeAndTime $LogFile.gz) $(getSizeAndTime $LogFile.xz)
+    echo 'Trace' $(getSize $TraceFile) $(getSizeAndTime $TraceFile.gz) $(getSizeAndTime $TraceFile.xz)
 }
 
 makeTable | column -t
