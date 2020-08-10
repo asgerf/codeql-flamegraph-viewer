@@ -133,14 +133,22 @@ export function fromLogStream(input: LineStream): TraceEventStream {
         beginPipeline(match[1]);
     });
 
-    input.on(/Tuple counts for (.*):/, match => {
+    input.on(/Tuple counts for (.*):$/, match => {
         beginPipeline(match[1]);
     });
 
+    function stripSuffix(name: string) {
+        return name.replace(/(#(cur_delta|prev_delta|prev)|@staged_ext|_delta)$/, '');
+    }
+
     const parseRelationSize = ([, name, rowsStr]: string[]) => {
         let rows = Number(rowsStr);
-        if (currentPipeline != null && currentPipeline.name === name) {
-            flushPipeline(rows);
+        if (currentPipeline != null) {
+            if (stripSuffix(currentPipeline.name) === stripSuffix(name)) {
+                flushPipeline(rows);
+            } else {
+                throw new Error(`Pipeline for ${currentPipeline.name} unexpectedly terminated by ${name}`);
+            }
         } else {
             onTraceEvent.fire({
                 ph: Phase.instant,
@@ -165,7 +173,7 @@ export function fromLogStream(input: LineStream): TraceEventStream {
         if (currentPipeline == null) { return; }
         let [, tupleCountStr, duplicationStr, arityStr, resultVariable, raText] = match;
         currentPipeline.tupleCounts.push(Number(tupleCountStr));
-        currentPipeline.duplicationFactors.push(Number(duplicationStr));
+        currentPipeline.duplicationFactors.push(Number(duplicationStr) / 100.0);
         currentPipeline.raTexts.push(raText);
     });
 

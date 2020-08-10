@@ -2,7 +2,9 @@
     "private": true,
     "scripts": {
         "build": "webpack",
-        "watch": "webpack --watch",
+        "watch:webpack": "webpack --watch --color",
+        "watch:tsc": "tsc -p . --watch --pretty",
+        "watch": "(yarn watch:webpack & yarn watch:tsc) | cat",
         "lint": "eslint src/**/*.ts",
         "lint-fix": "eslint src/**/*.ts --fix",
         "check": "tsc --noEmit -p . && npm run lint",
