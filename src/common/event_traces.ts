@@ -85,10 +85,12 @@ export const enum EventCategory {
     evaluation = 'eval',
 
     /** A predicate was found in the cache. */
-    cacheHit = 'cachehit',
+    cacheHit = 'cache hit',
 
     /** A metadata event. */
     metadata = 'meta',
+
+    stageEnded = 'stage end',
 }
 
 /** Base type for all trace events. */
@@ -196,10 +198,20 @@ export interface MetadataEvent extends TraceEventBase {
     cat: EventCategory.metadata; // redundant data, but since metadata events are very rare, it's fine.
 }
 
+export interface StageEndedEvent extends TraceEventBase {
+    ph: Phase.instant;
+    cat: EventCategory.stageEnded;
+    scope: Scope.process;
+
+    /** Space-separated list of output predicates from the stage. */
+    name: string;
+}
+
 export type TraceEvent =
     | EvaluationEvent
     | CacheHitEvent
     | MetadataEvent
+    | StageEndedEvent
     ;
 
 export interface Trace {
