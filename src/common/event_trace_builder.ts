@@ -1,11 +1,6 @@
 import { EventStream } from './event_stream';
 import { EventCategory, Phase, Scope, Trace, TraceEvent } from './event_traces';
 import { LineStream, streamLinesSync } from './line_stream';
-import { TupleCountStream, TupleCountParser } from './tuple_counts';
-
-export function getTraceEventsFromLogTextOld(text: string) {
-    return streamLinesSync(text).thenNew(TupleCountParser).then(toTraceEvents).then(makeTraceEventJson).get();
-}
 
 export function getTraceEventsFromLogText(text: string) {
     return streamLinesSync(text).then(fromLogStream).then(makeTraceEventJson).get();
@@ -14,55 +9,6 @@ export function getTraceEventsFromLogText(text: string) {
 export interface TraceEventStream {
     onTraceEvent: EventStream<TraceEvent>;
     end: EventStream<void>;
-}
-
-export function toTraceEvents(input: TupleCountStream): TraceEventStream {
-    const onTraceEvent = new EventStream<TraceEvent>();
-    let currentTime = 0;
-    let previousRA = new Map<string, number>();
-    input.onPipeline.listen(pipeline => {
-        currentTime += 1; // We don't currently parse time from the log
-        let tupleCounts: number[] = [];
-        let duplicationFactors: number[] = [];
-        let raTexts: string[] = [];
-        for (let step of pipeline.steps) {
-            tupleCounts.push(step.tupleCount);
-            duplicationFactors.push(step.duplication / 100.0);
-            raTexts.push(step.raText);
-        }
-
-        // Store the RA if not found
-        let fullRa = raTexts.join('\n');
-        let raValue: string[] | number = raTexts;
-        let id: number | undefined = undefined;
-        if (previousRA.has(fullRa)) {
-            raValue = previousRA.get(fullRa)!;
-        } else {
-            id = previousRA.size;
-            previousRA.set(fullRa, id);
-        }
-
-        onTraceEvent.fire({
-            ph: Phase.complete,
-            cat: EventCategory.evaluation,
-            name: pipeline.predicate,
-            tid: 1,
-            pid: 1,
-            ts: currentTime,
-            dur: 1,
-            args: {
-                rows: 0,
-                tc: tupleCounts,
-                dup: duplicationFactors,
-                ra: raValue,
-                id,
-            }
-        } as any);
-    });
-    return {
-        onTraceEvent,
-        end: input.end,
-    };
 }
 
 export function fromLogStream(input: LineStream): TraceEventStream {
@@ -121,6 +67,12 @@ export function fromLogStream(input: LineStream): TraceEventStream {
     }
 
     function beginPipeline(name: string) {
+        if (currentPipeline !== undefined) {
+            if (currentPipeline.raTexts.length > 0) {
+                throw new Error('Unterminated pipeline ' + currentPipeline.name);
+            }
+            return;
+        }
         currentPipeline = {
             name,
             tupleCounts: [],
@@ -164,10 +116,15 @@ export function fromLogStream(input: LineStream): TraceEventStream {
             });
         }
     };
-    input.on(/>>> Relation ([\w#:]+): (\d+) rows/, parseRelationSize);
-    input.on(/>>> Wrote relation ([\w#:]+) with (\d+) rows/, parseRelationSize);
-    input.on(/- ([\w#:]+) has (\d+) rows/, parseRelationSize);
-    input.on(/Found relation ([\w#:]+)\b.*\bRelation has (\d+) rows/, parseRelationSize);
+
+    input.on(/>>> Relation ((?:[\w()<>@#:]|"[^"]*")+): (\d+) rows/, parseRelationSize);
+    input.on(/>>> Wrote relation ((?:[\w()<>@#:]|"[^"]*")+)(?:\/[^ ]*)? with (\d+) rows/, parseRelationSize);
+    input.on(/- ((?:[\w()<>@#:]|"[^"]*")+) has (\d+) rows/, parseRelationSize);
+    input.on(/Found relation ((?:[\w()<>@#:]|"[^"]*")+)\b.*\bRelation has (\d+) rows/, parseRelationSize);
+
+    input.on(/Empty delta for ((?:[\w()<>@#:]|"[^"]*")+)/, match => {
+        parseRelationSize(['', match[1], '0']);
+    })
 
     input.on(/(\d+)\s+(?:~(\d+)%)?\s+[{](\d+)[}]\s+r(\d+)\s+=\s+(.*)/, match => {
         if (currentPipeline == null) { return; }

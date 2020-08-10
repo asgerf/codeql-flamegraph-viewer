@@ -1,11 +1,11 @@
 import * as cli from '@asgerf/strongcli';
+import { Constants, TraceEvent, TraceStreamJson } from '@tracerbench/trace-event';
 import * as fs from 'fs';
 import * as pathlib from 'path';
-import { getFlamegraphFromLogStream, getFlamegraphFromLogText, FlamegraphNode } from '../common/flamegraph_builder';
-import escapeHtml = require('lodash.escape');
-import { TraceEvent, Constants, TraceStreamJson } from '@tracerbench/trace-event';
+import { FlamegraphNode, getFlamegraphFromLogStream, getFlamegraphFromLogText } from '../common/flamegraph_builder';
 import { getLogFileFromCliArg } from '../common/get_log_file';
 import { mkdirp } from '../common/mkdirp';
+import escapeHtml = require('lodash.escape');
 
 enum Format {
     html = 'html',

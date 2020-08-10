@@ -1,17 +1,18 @@
 import { getDominanceRelation } from './dominators';
-import { streamLinesSync, streamLinesAsync } from './line_stream';
+import { EvaluationEvent, EventCategory, StageEndedEvent, TraceEvent } from './event_traces';
+import { fromLogStream, TraceEventStream } from './event_trace_builder';
+import { streamLinesAsync, streamLinesSync } from './line_stream';
 import { abbreviateStrings } from './string_set_abbreviation';
 import { getStronglyConnectedComponents, Scc } from './strongly_connected_components';
-import { getDependenciesFromRA, Pipeline, StageEndedEvent, TupleCountParser, TupleCountStream, isUnionOperator } from './tuple_counts';
+import { getDependenciesFromRA, isUnionOperator } from './tuple_counts';
 import { getInverse, withoutNulls } from './util';
-import { TraceEventStream } from './event_trace_builder';
 
 export function getFlamegraphFromLogText(text: string): FlamegraphNode {
-    return streamLinesSync(text).thenNew(TupleCountParser).thenNew(FlamegraphBuilder).get().finish();
+    return streamLinesSync(text).then(fromLogStream).thenNew(FlamegraphBuilder).get().finish();
 }
 
 export function getFlamegraphFromLogStream(stream: NodeJS.ReadableStream): Promise<FlamegraphNode> {
-    return streamLinesAsync(stream).thenNew(TupleCountParser).thenNew(FlamegraphBuilder).get().then(x => x.finish());
+    return streamLinesAsync(stream).then(fromLogStream).thenNew(FlamegraphBuilder).get().then(x => x.finish());
 }
 
 export interface FlamegraphNode {
@@ -45,9 +46,8 @@ export class FlamegraphBuilder {
     predicateNodes = new Map<string, PredicateNode>();
     stageNodes: FlamegraphNode[] = [];
 
-    constructor(input: TupleCountStream) {
-        input.onPipeline.listen(this.onPipeline.bind(this));
-        input.onStageEnded.listen(this.onStageEnded.bind(this));
+    constructor(input: TraceEventStream) {
+        input.onTraceEvent.listen(this.onTraceEvent.bind(this));
     }
 
     private getPredicateNode(name: string) {
@@ -59,26 +59,45 @@ export class FlamegraphBuilder {
         return result;
     }
 
+    private onTraceEvent(event: TraceEvent) {
+        switch (event.cat) {
+            case EventCategory.stageEnded: {
+                this.onStageEnded(event);
+                break;
+            }
+            case EventCategory.evaluation: {
+                this.onEvaluation(event);
+                break;
+            }
+        }
+    }
+
     private onStageEnded(event: StageEndedEvent) {
         this.stageNodes.push(this.getFlamegraphNodeFromStage(event));
         this.predicateNodes.clear();
     }
 
-    private onPipeline(pipeline: Pipeline) {
-        let name = rewritePredicateName(pipeline.predicate);
+    private onEvaluation(event: EvaluationEvent) {
+        let name = rewritePredicateName(event.name);
         let node = this.getPredicateNode(name);
+        let { args: { tc: tupleCounts, ra: raTexts } } = event;
+        if (raTexts == null || tupleCounts == null) { return; }
         node.seenEvaluation = true;
-        for (let step of pipeline.steps) {
-            if (!isUnionOperator(step.raText)) {
-                node.tupleCount += step.tupleCount;
+        let rawLines = [];
+        for (let i = 0; i < tupleCounts.length; ++i) {
+            let raText = (raTexts as string[])[i];
+            let tupleCount = tupleCounts[i];
+            if (!isUnionOperator(raText)) {
+                node.tupleCount += tupleCount;
             }
-            for (let otherRelation of getDependenciesFromRA(step.raText).inputRelations) {
+            for (let otherRelation of getDependenciesFromRA(raText).inputRelations) {
                 otherRelation = rewritePredicateName(otherRelation);
                 node.dependencies.add(otherRelation);
                 this.getPredicateNode(otherRelation).dependents.add(name);
             }
+            rawLines.push(`${tupleCount} ${raText}`); // TODO format properly
         }
-        node.rawLines.push(pipeline.rawLines);
+        node.rawLines.push(rawLines);
     }
 
     private getRoots() {
@@ -152,7 +171,7 @@ export class FlamegraphBuilder {
         let levelOneNodes = withoutNulls(rootSccs.map(n => this.getFlamegraphNodeFromScc(n, sccDominated)));
         return {
             kind: 'Stage',
-            name: abbreviateStrings(stage.queryPredicates),
+            name: abbreviateStrings(stage.name.split(' ')),
             value: totalValue(levelOneNodes),
             children: levelOneNodes,
         };
