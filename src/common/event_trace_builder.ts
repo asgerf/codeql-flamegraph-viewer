@@ -44,9 +44,17 @@ export function fromLogStream(input: LineStream): TraceEventStream {
     }
 
     let currentPipeline: Pipeline | undefined;
+    let raCache = new Map<string, number>();
+    let nextId = 1;
 
     function flushPipeline(numberOfRows: number) {
         if (currentPipeline !== undefined) {
+            let id = nextId++;
+            let fullRaText = currentPipeline.raTexts.join('\n');
+            let reusedRaId = raCache.get(fullRaText);
+            if (reusedRaId == null) {
+                raCache.set(fullRaText, id);
+            }
             onTraceEvent.fire({
                 ph: Phase.complete,
                 cat: EventCategory.evaluation,
@@ -59,7 +67,8 @@ export function fromLogStream(input: LineStream): TraceEventStream {
                     rows: numberOfRows,
                     dup: currentPipeline.duplicationFactors,
                     tc: currentPipeline.tupleCounts,
-                    ra: currentPipeline.raTexts,
+                    ra: reusedRaId ?? currentPipeline.raTexts,
+                    id,
                 }
             });
             currentPipeline = undefined;
@@ -99,32 +108,34 @@ export function fromLogStream(input: LineStream): TraceEventStream {
             if (stripSuffix(currentPipeline.name) === stripSuffix(name)) {
                 flushPipeline(rows);
             } else {
-                throw new Error(`Pipeline for ${currentPipeline.name} unexpectedly terminated by ${name}`);
+                console.warn(`On line ${input.lineNumber}:\nPipeline for ${currentPipeline.name} unexpectedly terminated by ${name}`);
             }
-        } else {
-            onTraceEvent.fire({
-                ph: Phase.instant,
-                cat: EventCategory.cacheHit,
-                name,
-                pid,
-                tid,
-                ts,
-                scope: Scope.process,
-                args: {
-                    rows
-                }
-            });
         }
     };
 
-    input.on(/>>> Relation ((?:[\w()<>@#:]|"[^"]*")+): (\d+) rows/, parseRelationSize);
-    input.on(/>>> Wrote relation ((?:[\w()<>@#:]|"[^"]*")+)(?:\/[^ ]*)? with (\d+) rows/, parseRelationSize);
-    input.on(/- ((?:[\w()<>@#:]|"[^"]*")+) has (\d+) rows/, parseRelationSize);
-    input.on(/Found relation ((?:[\w()<>@#:]|"[^"]*")+)\b.*\bRelation has (\d+) rows/, parseRelationSize);
+    const relationNameRex = '(?:[\\w@#:]|"[^"]*"|[(][^)]*[)]|<[^>]*>)+';
 
-    input.on(/Empty delta for ((?:[\w()<>@#:]|"[^"]*")+)/, match => {
+    input.on(new RegExp(`>>> Relation (${relationNameRex}): (\\d+) rows`), parseRelationSize);
+    input.on(new RegExp(`>>> Wrote relation (${relationNameRex})(?:/[^ ]*)? with (\\d+) rows`), parseRelationSize);
+    input.on(new RegExp(`- (${relationNameRex}) has (\\d+) rows`), parseRelationSize);
+    input.on(new RegExp(`Empty delta for (${relationNameRex})`), match => {
         parseRelationSize(['', match[1], '0']);
     })
+
+    input.on(new RegExp(`Found relation (${relationNameRex})\\b.*\\bRelation has (\\d+) rows`), ([, name, rowsStr]) => {
+        onTraceEvent.fire({
+            ph: Phase.instant,
+            cat: EventCategory.cacheHit,
+            name,
+            pid,
+            tid,
+            ts,
+            scope: Scope.process,
+            args: {
+                rows: Number(rowsStr)
+            }
+        });
+    });
 
     input.on(/(\d+)\s+(?:~(\d+)%)?\s+[{](\d+)[}]\s+r(\d+)\s+=\s+(.*)/, match => {
         if (currentPipeline == null) { return; }
@@ -142,6 +153,8 @@ export function fromLogStream(input: LineStream): TraceEventStream {
 
 export function makeTraceEventJson(stream: TraceEventStream): Trace {
     let traceEvents: TraceEvent[] = [];
-    stream.onTraceEvent.listen(te => traceEvents.push(te));
+    stream.onTraceEvent.listen(te => {
+        traceEvents.push(te);
+    });
     return { traceEvents };
 }

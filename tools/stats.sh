@@ -6,7 +6,7 @@ MyDir=$(dirname $(realpath $0))
 BaseDir="$MyDir/.."
 cd $BaseDir
 
-OrigLogFile='example-data/example.logfile.log'
+OrigLogFile=${1:-'example-data/example.logfile.log'}
 
 LogFile='scrap/example.logfile.log'
 TraceFile='scrap/example.trace.json'

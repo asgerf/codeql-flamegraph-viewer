@@ -45,6 +45,7 @@ function rewritePredicateName(name: string) {
 export class FlamegraphBuilder {
     predicateNodes = new Map<string, PredicateNode>();
     stageNodes: FlamegraphNode[] = [];
+    raTexts = new Map<number, string[]>();
 
     constructor(input: TraceEventStream) {
         input.onTraceEvent.listen(this.onTraceEvent.bind(this));
@@ -80,12 +81,18 @@ export class FlamegraphBuilder {
     private onEvaluation(event: EvaluationEvent) {
         let name = rewritePredicateName(event.name);
         let node = this.getPredicateNode(name);
-        let { args: { tc: tupleCounts, ra: raTexts } } = event;
+        let { args: { tc: tupleCounts, ra: raTexts, id } } = event;
         if (raTexts == null || tupleCounts == null) { return; }
+        if (typeof raTexts === 'number') {
+            raTexts = this.raTexts.get(raTexts)!;
+        }
+        if (id != null) {
+            this.raTexts.set(id, raTexts);
+        }
         node.seenEvaluation = true;
         let rawLines = [];
         for (let i = 0; i < tupleCounts.length; ++i) {
-            let raText = (raTexts as string[])[i];
+            let raText = raTexts[i];
             let tupleCount = tupleCounts[i];
             if (!isUnionOperator(raText)) {
                 node.tupleCount += tupleCount;
