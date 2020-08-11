@@ -78,9 +78,8 @@ export function fromLogStream(input: LineStream): TraceEventStream {
     function beginPipeline(name: string) {
         if (currentPipeline !== undefined) {
             if (currentPipeline.raTexts.length > 0) {
-                throw new Error('Unterminated pipeline ' + currentPipeline.name);
+                console.warn(`On line ${input.lineNumber}: Unterminated pipeline ${currentPipeline.name}`);
             }
-            return;
         }
         currentPipeline = {
             name,
@@ -108,7 +107,7 @@ export function fromLogStream(input: LineStream): TraceEventStream {
             if (stripSuffix(currentPipeline.name) === stripSuffix(name)) {
                 flushPipeline(rows);
             } else {
-                console.warn(`On line ${input.lineNumber}:\nPipeline for ${currentPipeline.name} unexpectedly terminated by ${name}`);
+                console.warn(`On line ${input.lineNumber}: Pipeline for ${currentPipeline.name} unexpectedly terminated by ${name}`);
             }
         }
     };
