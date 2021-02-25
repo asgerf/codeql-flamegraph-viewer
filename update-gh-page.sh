@@ -10,9 +10,13 @@ git checkout gh-pages
 git merge main
 
 yarn install
-yarn build-gh-pages
+rm -rf dist
+yarn build-example
 
+rm -rf docs
+mkdir docs
 cp dist/*.{js,css,html} ./docs/
+mv ./docs/flamegraph.html ./docs/index.html
 git add docs/*.{js,css,html}
 git commit -m 'Update gh-pages'
 git push
