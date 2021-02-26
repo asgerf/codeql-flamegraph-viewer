@@ -77,7 +77,7 @@ export class FlamegraphBuilder {
                 this.getPredicateNode(otherRelation).dependents.add(name);
             }
         }
-        node.rawLines.push(pipeline.rawLines);
+        // node.rawLines.push(pipeline.rawLines);
     }
 
     private getRoots() {
